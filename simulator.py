@@ -222,6 +222,34 @@ FICHES = {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# PARTENAIRES CEE — Cadres de contribution BAR-TH-171 (residentiel)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# mode "fixe"  : le client recoit X €/MWhc (valeur fixe), le reste a l'installateur
+# mode "pct"   : le client recoit X % de la prime totale
+
+PARTENAIRES = {
+    "Drapo": {
+        "mode":  "fixe",
+        "valeur": 3.0,
+        "desc":  "Drapo — 3,00 €/MWhc au client (montant fixe)",
+        "site":  "www.drapo.com",
+    },
+    "Picoty": {
+        "mode":  "pct",
+        "valeur": 50.0,
+        "desc":  "Picoty — 50 % de la prime au client",
+        "site":  "www.picoty.fr",
+    },
+    "Personnalise": {
+        "mode":  "libre",
+        "valeur": None,
+        "desc":  "Saisie libre par le professionnel",
+        "site":  "",
+    },
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CALCUL PRIME
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -309,204 +337,341 @@ def generate_pdf(fiche_id, params, prix_cee, prime_result, result=None, client_n
         f = FICHES[fiche_id]
 
         def clean(s):
-            """Remplace les caracteres non-latin1."""
             return str(s).encode("latin-1", errors="replace").decode("latin-1")
 
-        class PDF(FPDF):
-            def header(self):
-                self.set_font("Helvetica", "B", 9)
-                self.set_text_color(18, 99, 50)
-                self.cell(0, 8, "ECONOV'", align="L")
-                self.set_font("Helvetica", "", 7)
-                self.set_text_color(150, 150, 150)
-                self.set_xy(10, self.get_y())
-                self.cell(0, 8, clean(f"Simulateur CEE -- {fiche_id}"), align="R")
-                self.ln(3)
-                self.set_draw_color(97, 214, 144)
-                self.set_line_width(0.8)
-                self.line(10, self.get_y(), 200, self.get_y())
-                self.ln(5)
+        # ── Couleurs Econov ──────────────────────────────────────────────────
+        C_VERT_FONCE  = (18, 99, 50)    # #126332
+        C_VERT_CLAIR  = (97, 214, 144)  # #61d690
+        C_VERT_BG     = (241, 251, 245) # fond vert tres pale
+        C_GRIS_TITRE  = (160, 160, 160)
+        C_GRIS_TEXTE  = (80, 80, 80)
+        C_NOIR        = (20, 20, 20)
+        C_ROUGE       = (220, 38, 38)
+        C_ORANGE      = (217, 119, 6)
+        C_SEP         = (225, 237, 225)
 
+        MARGIN = 14
+        PAGE_W = 210 - 2 * MARGIN  # 182 mm
+
+        def section_title(pdf, label):
+            """Separateur + titre de section style uppercase gris."""
+            pdf.set_draw_color(*C_SEP)
+            pdf.set_line_width(0.4)
+            pdf.line(MARGIN, pdf.get_y(), 210 - MARGIN, pdf.get_y())
+            pdf.ln(3)
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.set_text_color(*C_GRIS_TITRE)
+            pdf.cell(0, 5, clean(label), new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
+
+        class PDF(FPDF):
             def footer(self):
-                self.set_y(-13)
-                self.set_font("Helvetica", "I", 7)
-                self.set_text_color(180, 180, 180)
-                self.cell(0, 8, "Resultats indicatifs, non contractuels -- Simulateur CEE Econov'", align="C")
+                self.set_y(-11)
+                self.set_draw_color(*C_SEP)
+                self.set_line_width(0.3)
+                self.line(MARGIN, self.get_y(), 210 - MARGIN, self.get_y())
+                self.ln(1)
+                self.set_font("Helvetica", "I", 6.5)
+                self.set_text_color(190, 190, 190)
+                self.cell(0, 5,
+                    "Resultats indicatifs, non contractuels — Simulateur CEE Econov'  |  Page "
+                    + str(self.page_no()),
+                    align="C"
+                )
 
         pdf = PDF()
         pdf.set_doc_option("core_fonts_encoding", "windows-1252")
-        pdf.set_margins(14, 14, 14)
+        pdf.set_margins(MARGIN, 0, MARGIN)
         pdf.add_page()
 
-        # Titre
+        # ── HEADER BANDE VERTE ───────────────────────────────────────────────
+        pdf.set_fill_color(*C_VERT_FONCE)
+        pdf.rect(0, 0, 210, 22, style="F")
+        # Logo Econov a gauche
+        pdf.set_xy(MARGIN, 7)
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(50, 8, "ECONOV'", align="L")
+        # Simulateur CEE a droite
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(180, 230, 200)
+        pdf.set_xy(MARGIN + 50, 7)
+        pdf.cell(PAGE_W - 50, 8, clean(f"Simulateur CEE — {fiche_id}"), align="R")
+        # Sous-titre fiche
+        pdf.set_xy(MARGIN, 15)
+        pdf.set_font("Helvetica", "", 7)
+        pdf.set_text_color(160, 220, 185)
+        pdf.cell(PAGE_W, 5, clean(f["label"]), align="L")
+
+        pdf.set_y(26)
+        pdf.set_margins(MARGIN, MARGIN, MARGIN)
+
+        # ── INFOS CLIENT + DATE ──────────────────────────────────────────────
+        import datetime
+        date_str = datetime.date.today().strftime("%d/%m/%Y")
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(*C_GRIS_TEXTE)
         if client_name:
-            pdf.set_font("Helvetica", "", 9)
-            pdf.set_text_color(150, 150, 150)
-            pdf.cell(0, 6, clean(f"Client : {client_name}"), new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(1)
+            pdf.cell(PAGE_W // 2, 5, clean(f"Client : {client_name}"), align="L")
+        else:
+            pdf.cell(PAGE_W // 2, 5, "")
+        pdf.cell(PAGE_W // 2, 5, clean(f"Date : {date_str}"), align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(4)
 
-        pdf.set_font("Helvetica", "B", 22)
-        pdf.set_text_color(0, 0, 0)
-        pdf.cell(0, 12, clean(f"Simulation {fiche_id}"), new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_text_color(100, 100, 100)
-        pdf.cell(0, 6, clean(f['label']), new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(6)
+        # ── BLOC PRIME PRINCIPALE ────────────────────────────────────────────
+        prime_val = prime_result.get("prime", 0)
+        if prime_val > 0:
+            box_h = 38 if prime_result.get("cdp") else 30
+            y0 = pdf.get_y()
+            # Fond vert pale
+            pdf.set_fill_color(*C_VERT_BG)
+            pdf.set_draw_color(*C_VERT_CLAIR)
+            pdf.set_line_width(0.5)
+            pdf.rect(MARGIN, y0, PAGE_W, box_h, style="FD")
 
-        # Prime principale
-        if prime_result.get("prime", 0) > 0:
-            pdf.set_fill_color(240, 250, 244)
-            pdf.rect(14, pdf.get_y(), 182, 32, style="F")
-            pdf.set_font("Helvetica", "B", 28)
-            pdf.set_text_color(18, 99, 50)
-            pdf.cell(0, 20, clean(f"{prime_result['prime']:,.2f} EUR"), align="C", new_x="LMARGIN", new_y="NEXT")
-            pdf.set_font("Helvetica", "", 8)
-            pdf.set_text_color(150, 150, 150)
-            pdf.cell(0, 7, "PRIME CEE ESTIMEE", align="C", new_x="LMARGIN", new_y="NEXT")
-            pdf.set_text_color(100, 100, 100)
-            pdf.set_font("Helvetica", "", 8)
-            pdf.cell(0, 5, clean(f"Gisement : {prime_result['gisement_mwh']} MWhc cumac -- {prime_result.get('detail', '')}"), align="C", new_x="LMARGIN", new_y="NEXT")
+            # Label
+            pdf.set_xy(MARGIN, y0 + 5)
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.set_text_color(*C_GRIS_TITRE)
+            pdf.cell(PAGE_W, 5, "PRIME CEE ESTIMEE", align="C", new_x="LMARGIN", new_y="NEXT")
+
+            # Montant
+            pdf.set_font("Helvetica", "B", 32)
+            pdf.set_text_color(*C_VERT_FONCE)
+            montant_str = f"{prime_val:,.2f} EUR".replace(",", " ")
+            pdf.cell(PAGE_W, 14, clean(montant_str), align="C", new_x="LMARGIN", new_y="NEXT")
+
+            # Detail gisement
+            pdf.set_font("Helvetica", "", 7.5)
+            pdf.set_text_color(*C_GRIS_TEXTE)
+            detail_str = clean(
+                f"Gisement : {prime_result.get('gisement_mwh', 0)} MWhc cumac  |  "
+                f"{prime_result.get('detail', '')}  |  Prix : {prix_cee} EUR/MWhc"
+            )
+            pdf.cell(PAGE_W, 5, detail_str, align="C", new_x="LMARGIN", new_y="NEXT")
+
+            # Badge Coup de Pouce
             if prime_result.get("cdp"):
-                pdf.set_text_color(18, 99, 50)
-                pdf.cell(0, 5, "Coup de Pouce Chauffage x5 inclus", align="C", new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(6)
+                pdf.ln(1)
+                pdf.set_font("Helvetica", "B", 7)
+                pdf.set_text_color(255, 255, 255)
+                pdf.set_fill_color(*C_VERT_FONCE)
+                pdf.cell(PAGE_W, 7, "  COUP DE POUCE CHAUFFAGE x5 INCLUS  ",
+                         align="C", fill=True, new_x="LMARGIN", new_y="NEXT")
 
-        # Parametres
-        pdf.set_font("Helvetica", "B", 7)
-        pdf.set_text_color(150, 150, 150)
-        pdf.cell(0, 5, "PARAMETRES", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_draw_color(220, 235, 220)
-        pdf.set_line_width(0.3)
-        pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-        pdf.ln(3)
+            pdf.set_y(y0 + box_h + 6)
+
+        else:
+            pdf.set_font("Helvetica", "", 9)
+            pdf.set_text_color(*C_GRIS_TITRE)
+            pdf.cell(0, 8, "Aucune prime calculee.", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
+
+        # ── REPARTITION CLIENT / INSTALLATEUR ────────────────────────────────
+        part_cl = prime_result.get("part_client")
+        part_in = prime_result.get("part_instal")
+        partenaire_pdf = prime_result.get("partenaire", "")
+        prix_cl_mwh    = prime_result.get("prix_client_mwh", 0)
+
+        if part_cl is not None and prime_val > 0:
+            section_title(pdf, "REPARTITION DE LA PRIME")
+            pct_cl = round(part_cl / prime_val * 100, 1)
+            pct_in = round(100 - pct_cl, 1)
+            half   = PAGE_W / 2 - 2
+
+            y_rep = pdf.get_y()
+
+            # Bloc client (vert)
+            pdf.set_fill_color(*C_VERT_BG)
+            pdf.set_draw_color(*C_VERT_CLAIR)
+            pdf.set_line_width(0.5)
+            pdf.rect(MARGIN, y_rep, half, 24, style="FD")
+            pdf.set_xy(MARGIN + 3, y_rep + 3)
+            pdf.set_font("Helvetica", "B", 6.5)
+            pdf.set_text_color(*C_GRIS_TITRE)
+            pdf.cell(half - 6, 4, clean(f"PART CLIENT  ({pct_cl}%)"))
+            pdf.set_xy(MARGIN + 3, y_rep + 8)
+            pdf.set_font("Helvetica", "B", 16)
+            pdf.set_text_color(*C_VERT_FONCE)
+            pdf.cell(half - 6, 10, clean(f"{part_cl:,.2f} EUR".replace(",", " ")))
+            pdf.set_xy(MARGIN + 3, y_rep + 19)
+            pdf.set_font("Helvetica", "", 6.5)
+            pdf.set_text_color(*C_GRIS_TITRE)
+            pdf.cell(half - 6, 4, clean(f"{prix_cl_mwh} EUR/MWhc — {partenaire_pdf}"))
+
+            # Bloc installateur (gris)
+            x2 = MARGIN + half + 4
+            pdf.set_fill_color(249, 251, 249)
+            pdf.set_draw_color(*C_SEP)
+            pdf.rect(x2, y_rep, half, 24, style="FD")
+            pdf.set_xy(x2 + 3, y_rep + 3)
+            pdf.set_font("Helvetica", "B", 6.5)
+            pdf.set_text_color(*C_GRIS_TITRE)
+            pdf.cell(half - 6, 4, clean(f"PART INSTALLATEUR  ({pct_in}%)"))
+            pdf.set_xy(x2 + 3, y_rep + 8)
+            pdf.set_font("Helvetica", "B", 16)
+            pdf.set_text_color(*C_NOIR)
+            prix_in_mwh = round(prime_result.get("gisement_mwh", 0) and
+                                (part_in / prime_result.get("gisement_mwh", 1)), 2)
+            pdf.cell(half - 6, 10, clean(f"{part_in:,.2f} EUR".replace(",", " ")))
+            pdf.set_xy(x2 + 3, y_rep + 19)
+            pdf.set_font("Helvetica", "", 6.5)
+            pdf.set_text_color(*C_GRIS_TITRE)
+            pdf.cell(half - 6, 4, clean("Marge Econov'"))
+
+            pdf.set_y(y_rep + 28)
+
+        # ── PARAMETRES ───────────────────────────────────────────────────────
+        section_title(pdf, "PARAMETRES DE SIMULATION")
 
         param_labels = {
-            "zone": "Zone climatique",
-            "surface": "Surface (m2)",
-            "type_logement": "Type de logement",
-            "usage_pac": "Usage PAC",
-            "etas": "Etas (%)",
-            "cdp": "Coup de Pouce",
-            "puissance_pac": "Puissance PAC (kW)",
-            "etas_ou_cop": "Etas (%) ou COP",
-            "facteur_r": "Facteur R",
-            "secteur_activite": "Secteur d'activite",
-            "application": "Application",
-            "puissance_kw": "Puissance (kW)",
-            "p_compresseur": "P compresseur (kW)",
-            "p_ecs": "P recup ECS (kW)",
-            "p_chauffage": "P recup chauffage (kW)",
+            "zone":            "Zone climatique",
+            "surface":         "Surface (m2)",
+            "type_logement":   "Type de logement",
+            "usage_pac":       "Usage PAC",
+            "etas":            "Etas (%)",
+            "cdp":             "Coup de Pouce",
+            "puissance_pac":   "Puissance PAC (kW)",
+            "etas_ou_cop":     "Etas (%) ou COP",
+            "facteur_r":       "Facteur R",
+            "secteur_activite":"Secteur d'activite",
+            "application":     "Application",
+            "puissance_kw":    "Puissance (kW)",
+            "p_compresseur":   "P compresseur (kW)",
+            "p_ecs":           "P recup ECS (kW)",
+            "p_chauffage":     "P recup chauffage (kW)",
         }
 
-        pdf.set_font("Helvetica", "", 8)
+        # Exclure les cles de repartition (affichees dans leur propre bloc)
+        EXCLUDE_PARAMS = {"prix_client_mwh", "partenaire"}
         rows = []
         for k, v in params.items():
+            if k in EXCLUDE_PARAMS:
+                continue
             lbl = param_labels.get(k, k)
             if k == "cdp":
-                v = "Oui" if v else "Non"
+                v = "Oui — x5" if v else "Non"
             rows.append((lbl, str(v)))
         rows.append(("Prix CEE", f"{prix_cee} EUR/MWhc"))
 
-        col_w = 90
+        col_w = PAGE_W / 2
+        row_h_lbl = 4
+        row_h_val = 5.5
+        pdf.set_x(MARGIN)
+
         for i in range(0, len(rows), 2):
             r1 = rows[i]
             r2 = rows[i + 1] if i + 1 < len(rows) else None
-            pdf.set_text_color(130, 130, 130)
-            pdf.cell(col_w, 5, clean(r1[0]))
-            if r2:
-                pdf.cell(col_w, 5, clean(r2[0]), new_x="LMARGIN", new_y="NEXT")
-            else:
-                pdf.ln(5)
-            pdf.set_text_color(0, 0, 0)
-            pdf.set_font("Helvetica", "B", 8)
-            pdf.cell(col_w, 5, clean(r1[1]))
-            if r2:
-                pdf.cell(col_w, 5, clean(r2[1]), new_x="LMARGIN", new_y="NEXT")
-            else:
-                pdf.ln(5)
-            pdf.set_font("Helvetica", "", 8)
-            pdf.ln(2)
+
+            # Labels (gris, petite casse)
+            pdf.set_font("Helvetica", "", 7)
+            pdf.set_text_color(*C_GRIS_TITRE)
+            pdf.cell(col_w, row_h_lbl, clean(r1[0]))
+            pdf.cell(col_w, row_h_lbl, clean(r2[0]) if r2 else "",
+                     new_x="LMARGIN", new_y="NEXT")
+
+            # Valeurs (noir, gras)
+            pdf.set_font("Helvetica", "B", 8.5)
+            pdf.set_text_color(*C_NOIR)
+            pdf.cell(col_w, row_h_val, clean(r1[1]))
+            pdf.cell(col_w, row_h_val, clean(r2[1]) if r2 else "",
+                     new_x="LMARGIN", new_y="NEXT")
+
+            # Separateur leger
+            pdf.set_draw_color(*C_SEP)
+            pdf.set_line_width(0.2)
+            pdf.line(MARGIN, pdf.get_y(), 210 - MARGIN, pdf.get_y())
+            pdf.ln(1.5)
 
         pdf.ln(4)
 
-        # Analyse document
+        # ── ANALYSE DOCUMENT ─────────────────────────────────────────────────
         if result:
             score = result.get("score_cee", 0)
-            pdf.set_font("Helvetica", "B", 7)
-            pdf.set_text_color(150, 150, 150)
-            pdf.cell(0, 5, "VERIFICATION DOCUMENT", new_x="LMARGIN", new_y="NEXT")
-            pdf.set_draw_color(220, 235, 220)
-            pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-            pdf.ln(3)
+            section_title(pdf, "VERIFICATION DOCUMENT")
 
             if score >= 80:
-                sc = (18, 99, 50)
+                fill_col = (236, 253, 245)
+                border_col = (167, 243, 208)
+                txt_col = C_VERT_FONCE
                 sv = "Document conforme"
             elif score >= 50:
-                sc = (217, 119, 6)
+                fill_col = (255, 251, 235)
+                border_col = (253, 230, 138)
+                txt_col = C_ORANGE
                 sv = "Points a corriger"
             else:
-                sc = (220, 38, 38)
+                fill_col = (254, 242, 242)
+                border_col = (254, 202, 202)
+                txt_col = C_ROUGE
                 sv = "Document non conforme"
 
-            pdf.set_font("Helvetica", "B", 20)
-            pdf.set_text_color(*sc)
-            pdf.cell(30, 12, clean(f"{score}/100"))
-            pdf.set_font("Helvetica", "", 9)
-            pdf.set_text_color(50, 50, 50)
-            pdf.set_xy(44, pdf.get_y() + 3)
-            pdf.cell(0, 6, clean(sv), new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(3)
+            # Bande de score
+            y_sc = pdf.get_y()
+            pdf.set_fill_color(*fill_col)
+            pdf.set_draw_color(*border_col)
+            pdf.set_line_width(0.5)
+            pdf.rect(MARGIN, y_sc, PAGE_W, 18, style="FD")
+            pdf.set_xy(MARGIN + 4, y_sc + 2)
+            pdf.set_font("Helvetica", "B", 22)
+            pdf.set_text_color(*txt_col)
+            pdf.cell(28, 14, clean(f"{score}"))
+            pdf.set_font("Helvetica", "", 7)
+            pdf.set_text_color(*C_GRIS_TITRE)
+            pdf.cell(10, 14, "/100")
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(*txt_col)
+            pdf.cell(0, 14, clean(sv))
+            pdf.set_y(y_sc + 20)
 
+            # Blocages
             for b in result.get("blocages_cee", []):
-                pdf.set_text_color(220, 38, 38)
-                pdf.set_font("Helvetica", "", 8)
-                pdf.multi_cell(0, 5, clean(f"BLOQUANT : {b}"), new_x="LMARGIN", new_y="NEXT")
-            for a in result.get("points_attention", []):
-                pdf.set_text_color(217, 119, 6)
-                pdf.set_font("Helvetica", "", 8)
-                pdf.multi_cell(0, 5, clean(f"A corriger : {a}"), new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "B", 7)
+                pdf.set_text_color(*C_ROUGE)
+                pdf.cell(14, 5, "BLOQUANT")
+                pdf.set_font("Helvetica", "", 7.5)
+                pdf.set_text_color(*C_GRIS_TEXTE)
+                pdf.multi_cell(PAGE_W - 14, 5, clean(b), new_x="LMARGIN", new_y="NEXT")
 
-            # Mentions
+            for a in result.get("points_attention", []):
+                pdf.set_font("Helvetica", "B", 7)
+                pdf.set_text_color(*C_ORANGE)
+                pdf.cell(14, 5, "ATTENTION")
+                pdf.set_font("Helvetica", "", 7.5)
+                pdf.set_text_color(*C_GRIS_TEXTE)
+                pdf.multi_cell(PAGE_W - 14, 5, clean(a), new_x="LMARGIN", new_y="NEXT")
+
+            # Mentions CEE
             mentions = result.get("mentions_cee", [])
             if mentions:
                 pdf.ln(4)
-                pdf.set_font("Helvetica", "B", 7)
-                pdf.set_text_color(150, 150, 150)
-                pdf.cell(0, 5, "DETAIL DES MENTIONS CEE", new_x="LMARGIN", new_y="NEXT")
-                pdf.set_draw_color(220, 235, 220)
-                pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-                pdf.ln(3)
-
+                section_title(pdf, "DETAIL DES MENTIONS CEE")
                 for m in mentions:
                     present  = m.get("present", False)
                     conforme = m.get("conforme")
                     if present and conforme is not False:
-                        icon, color = "OK ", (18, 99, 50)
+                        icon, color = "OK", C_VERT_FONCE
                     elif present:
-                        icon, color = "!! ", (217, 119, 6)
+                        icon, color = "!!", C_ORANGE
                     else:
-                        icon, color = "X  ", (220, 38, 38)
-                    pdf.set_font("Helvetica", "B", 7)
+                        icon, color = "X", C_ROUGE
+                    pdf.set_font("Helvetica", "B", 7.5)
                     pdf.set_text_color(*color)
-                    pdf.cell(8, 5, icon)
-                    pdf.set_font("Helvetica", "", 7)
-                    pdf.set_text_color(50, 50, 50)
-                    val = f" -> {m['valeur']}" if m.get("valeur") else ""
-                    pdf.multi_cell(0, 5, clean(f"{m.get('mention', '')}{val}"), new_x="LMARGIN", new_y="NEXT")
+                    pdf.cell(10, 5, icon)
+                    pdf.set_font("Helvetica", "", 7.5)
+                    pdf.set_text_color(*C_GRIS_TEXTE)
+                    val = clean(f" → {m['valeur']}") if m.get("valeur") else ""
+                    pdf.multi_cell(PAGE_W - 10, 5,
+                                   clean(f"{m.get('mention', '')}{val}"),
+                                   new_x="LMARGIN", new_y="NEXT")
         else:
-            # Juste les mentions attendues
-            pdf.set_font("Helvetica", "B", 7)
-            pdf.set_text_color(150, 150, 150)
-            pdf.cell(0, 5, "MENTIONS CEE REQUISES SUR LE DOCUMENT", new_x="LMARGIN", new_y="NEXT")
-            pdf.set_draw_color(220, 235, 220)
-            pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-            pdf.ln(3)
-            pdf.set_font("Helvetica", "", 8)
-            pdf.set_text_color(70, 70, 70)
+            # Mentions requises sans analyse
+            section_title(pdf, "MENTIONS CEE REQUISES SUR LE DOCUMENT")
             for mention in f["mentions_cee"]:
-                pdf.cell(5, 5, "-")
-                pdf.multi_cell(0, 5, clean(mention), new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 7)
+                pdf.set_text_color(*C_GRIS_TEXTE)
+                pdf.cell(6, 5, "-")
+                pdf.multi_cell(PAGE_W - 6, 5, clean(mention), new_x="LMARGIN", new_y="NEXT")
 
         return bytes(pdf.output())
 
@@ -991,6 +1156,20 @@ label[data-testid="stWidgetLabel"] p {
     letter-spacing: 0 !important;
     color: #374151 !important;
 }
+/* Toggle Coup de Pouce */
+.stToggle label p {
+    font-size: 0.88rem !important;
+    font-weight: 700 !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    color: #374151 !important;
+}
+[data-testid="stToggle"] > label > div[role="checkbox"][aria-checked="true"] {
+    background-color: #126332 !important;
+}
+[data-testid="stToggle"] > label > div[role="checkbox"] {
+    border-color: #d97706 !important;
+}
 .stAlert { border-radius: 11px !important; }
 details > summary {
     font-family: 'Montserrat', sans-serif !important;
@@ -1019,9 +1198,13 @@ def render_params_widgets(fiche_id):
     with c2:
         profil = st.selectbox("Profil client", ["Classique", "Precarite"], key="p_profil")
     bk = "precarite" if profil == "Precarite" else "classique"
+    # Prix auto par profil : 7.2 classique / 13.0 precarite — reset si profil change
+    prix_default = 13.0 if profil == "Precarite" else 7.2
+    if st.session_state.get("p_profil_prev") != profil:
+        st.session_state["p_prix"] = prix_default
+    st.session_state["p_profil_prev"] = profil
     with c3:
-        prix_ref = float(calcul.get("prix_ref", {}).get(bk, 7.0))
-        prix_cee = st.number_input("Prix CEE (EUR/MWhc)", value=prix_ref,
+        prix_cee = st.number_input("Prix CEE (EUR/MWhc)", value=prix_default,
                                     step=0.1, min_value=1.0, max_value=30.0, key="p_prix")
 
     params = {"zone": zone}
@@ -1042,10 +1225,90 @@ def render_params_widgets(fiche_id):
         with cb:
             params["usage_pac"] = st.selectbox("Usage PAC",
                                                 ["Chauffage", "Chauffage + ECS"], key="p_usage")
-            params["etas"] = st.number_input("Etas (%)", value=130,
-                                              min_value=100, max_value=250, key="p_etas")
-        params["cdp"] = st.checkbox(
-            "Remplacement chaudiere fioul / gaz / charbon — Coup de Pouce x5", key="p_cdp")
+            # Selecteur tranches officielles BAR-TH-171
+            etas_opts = {
+                "MHT — Etas 111 a 126 % (tres haute temp.)":  115,
+                "BT — Etas 126 a 140 % (basse temp.)":        130,
+                "BT HP — Etas >= 140 % (haute performance)":  145,
+            }
+            etas_sel = st.selectbox("Performance Etas (tranche officielle)",
+                                    list(etas_opts.keys()), index=1, key="p_etas_tr")
+            params["etas"] = etas_opts[etas_sel]
+
+        # CDP — toggle proement avec baniere visible
+        st.markdown("""
+<div style="background:#fffbeb;border:2px solid #fde68a;border-radius:14px;
+padding:1rem 1.25rem;margin:1.25rem 0 0.5rem;display:flex;align-items:center;gap:1rem">
+<div style="font-size:1.6rem;line-height:1">&#128293;</div>
+<div style="flex:1">
+<div style="font-size:0.68rem;font-weight:800;color:#d97706;text-transform:uppercase;
+letter-spacing:1.5px;margin-bottom:3px">COUP DE POUCE CHAUFFAGE — Prime x5</div>
+<div style="font-size:0.82rem;color:#374151;font-weight:600;line-height:1.4">
+Remplacement d'une chaudiere au fioul, gaz ou charbon existante</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
+        params["cdp"] = st.toggle(
+            "Activer le Coup de Pouce Chauffage (x5)", key="p_cdp",
+            help="La prime est multipliee par 5 en cas de remplacement d'une chaudiere fioul/gaz/charbon."
+        )
+
+        # ── REPARTITION DE LA PRIME ─────────────────────────────────────────
+        st.markdown("""
+<div style="margin-top:1.25rem;margin-bottom:0.25rem;">
+<span style="font-size:0.68rem;font-weight:800;text-transform:uppercase;
+letter-spacing:2px;color:#bbb">REPARTITION DE LA PRIME</span>
+</div>""", unsafe_allow_html=True)
+
+        cp1, cp2, cp3 = st.columns([3, 3, 4])
+        with cp1:
+            partenaire_sel = st.selectbox(
+                "Partenaire CEE",
+                list(PARTENAIRES.keys()),
+                key="p_partenaire",
+                help="Selectionner le pollueur obligé — pre-remplit la part client selon son cadre de contribution."
+            )
+        ptn = PARTENAIRES[partenaire_sel]
+
+        # Calcul du prix client par defaut selon le mode du partenaire
+        if ptn["mode"] == "fixe":
+            default_prix_client = float(ptn["valeur"])
+            help_txt = f"{partenaire_sel} : {ptn['valeur']} EUR/MWhc fixes au client"
+        elif ptn["mode"] == "pct":
+            default_prix_client = round(prix_cee * ptn["valeur"] / 100.0, 2)
+            help_txt = f"{partenaire_sel} : {ptn['valeur']}% de {prix_cee} EUR/MWhc"
+        else:
+            default_prix_client = round(prix_cee * 0.5, 2)
+            help_txt = "Saisie libre — ajustez la part client"
+
+        # Reset si partenaire change
+        if st.session_state.get("p_partenaire_prev") != partenaire_sel:
+            st.session_state["p_prix_client"] = default_prix_client
+        st.session_state["p_partenaire_prev"] = partenaire_sel
+
+        with cp2:
+            prix_client_mwh = st.number_input(
+                "Part client (EUR/MWhc)",
+                value=default_prix_client,
+                min_value=0.0,
+                max_value=float(prix_cee),
+                step=0.1,
+                key="p_prix_client",
+                help=help_txt,
+            )
+        with cp3:
+            prix_instal_mwh = round(prix_cee - prix_client_mwh, 2)
+            pct_client = round(prix_client_mwh / prix_cee * 100, 1) if prix_cee > 0 else 0
+            st.markdown(
+                f'<div style="padding-top:1.6rem;font-size:0.82rem;color:#555;font-weight:600">'
+                f'Client : <strong style="color:#126332">{pct_client}%</strong>'
+                f'&nbsp;&nbsp;|&nbsp;&nbsp;'
+                f'Installateur : <strong style="color:#374151">{round(100-pct_client,1)}%</strong>'
+                f'&nbsp;&nbsp;({prix_instal_mwh} EUR/MWhc)</div>',
+                unsafe_allow_html=True,
+            )
+        params["prix_client_mwh"] = prix_client_mwh
+        params["partenaire"]      = partenaire_sel
 
     elif ctype == "pac_tertiaire":
         st.markdown('<div style="height:.5rem"></div>', unsafe_allow_html=True)
@@ -1053,8 +1316,26 @@ def render_params_widgets(fiche_id):
         with ca:
             params["puissance_pac"] = st.number_input("Puissance PAC (kW)",
                                                        value=200.0, min_value=1.0, key="p_ppac")
-            params["etas_ou_cop"] = st.number_input("Etas (%) ou COP",
-                                                     value=130.0, min_value=0.0, key="p_ec")
+            puissance_val = params["puissance_pac"]
+            if puissance_val <= 400:
+                # Tranches Etas officielles BAT-TH-163 (<=400 kW)
+                etas_tert_opts = {
+                    "Etas 111 % a 126 % (seuil minimum)": 115,
+                    "Etas 126 % a 175 % (performance standard)": 140,
+                    "Etas >= 175 % (tres haute performance)": 180,
+                }
+                etas_sel_t = st.selectbox("Tranche Etas (<=400 kW)",
+                                          list(etas_tert_opts.keys()), key="p_ec_tr")
+                params["etas_ou_cop"] = float(etas_tert_opts[etas_sel_t])
+            else:
+                # COP pour puissance >400 kW
+                cop_opts = {
+                    "COP 4 a 5 (standard)":    4.5,
+                    "COP >= 5 (haute perf)":   5.5,
+                }
+                cop_sel = st.selectbox("Tranche COP (>400 kW)",
+                                       list(cop_opts.keys()), key="p_ec_tr")
+                params["etas_ou_cop"] = float(cop_opts[cop_sel])
         with cb:
             params["surface"] = st.number_input("Surface chauffee (m2)",
                                                  value=500.0, step=10.0, key="p_surf")
@@ -1212,6 +1493,13 @@ def main():
         detail       = prime_result.get("detail", "")
         cdp          = prime_result.get("cdp", False)
 
+        # Repartition client / installateur (uniquement si partenaire renseigne)
+        part_client = None
+        part_instal = None
+        if "prix_client_mwh" in params and gis > 0 and prime_val > 0:
+            part_client = round(gis * params["prix_client_mwh"], 2)
+            part_instal = round(prime_val - part_client, 2)
+
         # En-tete section + bouton PDF
         col_sec2, col_pdf2 = st.columns([5, 5], gap="medium")
         with col_sec2:
@@ -1220,6 +1508,12 @@ def main():
             if prime_val > 0:
                 result = st.session_state.result
                 client_name = ""
+                # Injecter la repartition dans prime_result pour le PDF
+                if part_client is not None:
+                    prime_result["part_client"]    = part_client
+                    prime_result["part_instal"]    = part_instal
+                    prime_result["partenaire"]     = params.get("partenaire", "")
+                    prime_result["prix_client_mwh"]= params.get("prix_client_mwh", 0)
                 pdf_bytes = generate_pdf(fiche_id, params, prix_cee, prime_result, result, client_name)
                 if pdf_bytes:
                     st.download_button(
@@ -1270,6 +1564,42 @@ def main():
                 st.caption(f"ℹ️ {rappel}")
             if prime_result.get("p_cap"):
                 st.caption(f"Cap Precup max : {prime_result['p_cap']} kW")
+
+            # Repartition client / installateur
+            if part_client is not None:
+                partenaire_lbl = params.get("partenaire", "")
+                pct_cl = round(part_client / prime_val * 100, 1) if prime_val > 0 else 0
+                pct_in = round(100 - pct_cl, 1)
+                col_cl, col_in = st.columns(2, gap="medium")
+                with col_cl:
+                    st.markdown(
+                        f'<div style="background:#f1fbf5;border:1.5px solid #c8e8d4;border-radius:14px;'
+                        f'padding:1.1rem 1.4rem;text-align:center">'
+                        f'<div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;'
+                        f'letter-spacing:1.5px;color:#126332;margin-bottom:0.4rem">'
+                        f'PART CLIENT &nbsp;<span style="font-weight:500;color:#aaa">({pct_cl}%)</span></div>'
+                        f'<div style="font-size:1.9rem;font-weight:900;color:#126332;letter-spacing:-1px">'
+                        f'{part_client:,.2f} <span style="font-size:1rem">EUR</span></div>'
+                        f'<div style="font-size:0.72rem;color:#aaa;margin-top:0.3rem">'
+                        f'{params.get("prix_client_mwh",0)} EUR/MWhc — via {partenaire_lbl}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                with col_in:
+                    instal_per_mwh = round(prix_cee - params.get("prix_client_mwh", 0), 2)
+                    st.markdown(
+                        f'<div style="background:#f9fbf9;border:1.5px solid #e5ede5;border-radius:14px;'
+                        f'padding:1.1rem 1.4rem;text-align:center">'
+                        f'<div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;'
+                        f'letter-spacing:1.5px;color:#374151;margin-bottom:0.4rem">'
+                        f'PART INSTALLATEUR &nbsp;<span style="font-weight:500;color:#aaa">({pct_in}%)</span></div>'
+                        f'<div style="font-size:1.9rem;font-weight:900;color:#374151;letter-spacing:-1px">'
+                        f'{part_instal:,.2f} <span style="font-size:1rem">EUR</span></div>'
+                        f'<div style="font-size:0.72rem;color:#aaa;margin-top:0.3rem">'
+                        f'{instal_per_mwh} EUR/MWhc — marge Econov</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
         else:
             st.markdown(
                 '<div class="prime-empty">Renseignez les parametres ci-dessus pour voir la prime estimee</div>',
