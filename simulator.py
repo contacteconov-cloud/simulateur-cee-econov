@@ -517,7 +517,7 @@ def generate_pdf(fiche_id, params, prix_cee, prime_result, result=None, client_n
             pdf.set_xy(x2 + 3, y_rep + 19)
             pdf.set_font("Helvetica", "", 6.5)
             pdf.set_text_color(*C_GRIS_TITRE)
-            pdf.cell(half - 6, 4, clean("Marge Econov'"))
+            pdf.cell(half - 6, 4, clean("Prime installateur"))
 
             pdf.set_y(y_rep + 28)
 
@@ -1596,7 +1596,7 @@ def main():
                         f'<div style="font-size:1.9rem;font-weight:900;color:#374151;letter-spacing:-1px">'
                         f'{part_instal:,.2f} <span style="font-size:1rem">EUR</span></div>'
                         f'<div style="font-size:0.72rem;color:#aaa;margin-top:0.3rem">'
-                        f'{instal_per_mwh} EUR/MWhc — marge Econov</div>'
+                        f'{instal_per_mwh} EUR/MWhc — Prime installateur</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
